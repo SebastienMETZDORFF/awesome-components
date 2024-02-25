@@ -9,6 +9,7 @@ import { Post } from '../../models/post.model';
 export class PostListItemComponent {
   @Input() post!: Post;
   @Output() postCommented = new EventEmitter<{ comment: string, postId: number}>();
+  tempUser = { firstName: 'Sébastien', lastName: 'Metzdorff'};
 
   onNewComment(comment: string) {
     this.postCommented.emit({ comment, postId: this.post.id});
