@@ -1,5 +1,7 @@
 import { Component, OnInit } from '@angular/core';
-import { FormBuilder, FormControl, FormGroup, Validators } from '@angular/forms';
+import { AbstractControl, FormBuilder, FormControl, FormGroup, Validators } from '@angular/forms';
+import { Observable, map, startWith, tap } from 'rxjs';
+import { ComplexFormService } from '../../services/complex-form.service';
 
 @Component({
   selector: 'app-complex-form',
@@ -7,6 +9,7 @@ import { FormBuilder, FormControl, FormGroup, Validators } from '@angular/forms'
   styleUrls: ['./complex-form.component.scss']
 })
 export class ComplexFormComponent implements OnInit {
+  loading: boolean = false;
   mainForm!: FormGroup;
   personalInfoForm!: FormGroup;
   contactPreferenceCtrl!: FormControl;
@@ -18,13 +21,18 @@ export class ComplexFormComponent implements OnInit {
   confirmPasswordCtrl!: FormControl;
   loginInfoForm!: FormGroup;
 
-  constructor(private formBuilder: FormBuilder) {}
+  showEmailCtrl$!: Observable<boolean>;
+  showPhoneCtrl$!: Observable<boolean>;
+
+  constructor(private formBuilder: FormBuilder,
+              private complexFormService: ComplexFormService) {}
 
   ngOnInit(): void {
     this.initFormControls();
     this.initMainForm();
+    this.initFormObservables();
   }
-
+  
   private initFormControls(): void {
     this.personalInfoForm = this.formBuilder.group({
       firstName: ['', Validators.required],
@@ -56,8 +64,71 @@ export class ComplexFormComponent implements OnInit {
       loginInfo: this.loginInfoForm
     });
   }
+
+  private initFormObservables(): void {
+    this.showEmailCtrl$ = this.contactPreferenceCtrl.valueChanges.pipe(
+      startWith(this.contactPreferenceCtrl.value),
+      map(preference => preference === 'email'),
+      tap(showEmailCtrl => this.setEmailValidators(showEmailCtrl))
+    );
+    this.showPhoneCtrl$ = this.contactPreferenceCtrl.valueChanges.pipe(
+      startWith(this.contactPreferenceCtrl.value),
+      map(preference => preference === 'phone'),
+      tap(showPhoneCtrl => this.setPhoneValidators(showPhoneCtrl))
+    );
+  }
+
+  private setEmailValidators(showEmailCtrl: boolean): void {
+    if (showEmailCtrl) {
+      this.emailCtrl.addValidators([Validators.required, Validators.email]);
+      this.confirmEmailCtrl.addValidators([Validators.required, Validators.email]);
+    } else {
+      this.emailCtrl.clearValidators();
+      this.confirmEmailCtrl.clearValidators();
+    }
+    this.emailCtrl.updateValueAndValidity();
+    this.confirmEmailCtrl.updateValueAndValidity();
+  }
+
+  private setPhoneValidators(showPhoneCtrl: boolean): void {
+    if (showPhoneCtrl) {
+      this.phoneCtrl.addValidators([Validators.required, Validators.minLength(10), Validators.maxLength(10)]);
+    } else {
+      this.phoneCtrl.clearValidators();
+    }
+    this.phoneCtrl.updateValueAndValidity();
+  }
   
   onSubmitForm() {
-    console.log(this.mainForm.value);
+    this.loading = true;
+    this.complexFormService.saveUserInfo(this.mainForm.value).pipe(
+      tap(saved => {
+        this.loading = false;
+        if (saved) {
+          this.resetForm();
+        } else {
+          console.error('Echec de l\'enregistrement');
+        }
+      })
+    ).subscribe();
+  }
+
+  private resetForm(): void {
+    this.mainForm.reset();
+    this.contactPreferenceCtrl.patchValue('email');
+  }
+
+  getFormControlErrorText(ctrl: AbstractControl): string {
+    if (ctrl.hasError('required')) {
+      return 'Ce champ est requis';
+    } else if (ctrl.hasError('email')) {
+      return 'Merci d\'entrer une adresse mail valide';
+    } else if (ctrl.hasError('minlength')) {
+      return 'Ce numéro de téléphone ne contient pas assez de chiffres';
+    } else if (ctrl.hasError('maxlength')) {
+      return 'Ce numéro de téléphone contient trop de chiffres';
+    } else {
+      return 'Ce champ contient une erreur';
+    }
   }
 }
